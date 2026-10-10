@@ -1,0 +1,11 @@
+.gradle/
+local.properties
+**/build/
+audit/*-profile/
+audit/library-helper/
+*.log
+*.jks
+*.keystore
+*.env
+.build-tools/
+delivery/

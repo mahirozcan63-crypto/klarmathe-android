@@ -1,0 +1,3 @@
+<resources><string name="app_name">KlarLernen</string><string name="startup_error">KlarLernen konnte nicht geöffnet werden. Bitte starte die App erneut. Deine gespeicherten Übungen werden dabei nicht gelöscht.</string>
+<string name="startup_retry">Erneut öffnen</string>
+</resources>

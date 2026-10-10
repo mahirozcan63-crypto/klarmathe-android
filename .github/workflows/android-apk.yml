@@ -1,0 +1,63 @@
+name: Android APK
+on:
+  push:
+    branches: [main]
+    paths: ['app/**', 'tests/SafeMathTest.java', '*.gradle', 'gradle.properties', '.github/workflows/android-apk.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    # Standard Linux runners are free for PUBLIC repositories.
+    # Never run this workflow on a private repo without a separate quota review.
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+      - name: Check preinstalled Android SDK
+        shell: bash
+        run: |
+          test -f "$ANDROID_HOME/platforms/android-36/android.jar"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+      - name: Run native math checks
+        shell: bash
+        run: |
+          mkdir -p build/math-checks
+          javac -encoding UTF-8 -d build/math-checks app/src/main/java/de/klarlernen/app/SafeMath.java tests/SafeMathTest.java
+          java -cp build/math-checks de.klarlernen.app.SafeMathTest
+      - name: Test, lint and build Android application
+        run: gradle --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+      - name: Verify APK signature and package
+        shell: bash
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK"
+          mkdir -p delivery
+          cp "$APK" delivery/KlarLernen.apk
+          sha256sum delivery/KlarLernen.apk > delivery/SHA256.txt
+      - name: Publish public APK download without Actions artifact storage
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="debug-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          jq -n --arg tag "$TAG" --arg commit "$GITHUB_SHA" '{tag_name:$tag,target_commitish:$commit,name:"KlarLernen Android test APK",body:"Debug APK for device testing. Not a Play Store release. Real device acceptance testing is still required.",draft:false,prerelease:true}' > delivery/release.json
+          curl --fail-with-body --silent --show-error -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "Content-Type: application/json" --data-binary @delivery/release.json "https://api.github.com/repos/$GITHUB_REPOSITORY/releases" > delivery/release-response.json
+          RELEASE_UPLOAD=$(jq -r '.upload_url | split("{")[0]' delivery/release-response.json)
+          curl --fail-with-body --silent --show-error -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: application/vnd.android.package-archive" --data-binary @delivery/KlarLernen.apk "$RELEASE_UPLOAD?name=KlarLernen.apk" > delivery/apk-response.json
+          curl --fail-with-body --silent --show-error -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Content-Type: text/plain" --data-binary @delivery/SHA256.txt "$RELEASE_UPLOAD?name=SHA256.txt" > delivery/checksum-response.json
+          jq -r '"[KlarLernen.apk](" + .browser_download_url + ")"' delivery/apk-response.json >> "$GITHUB_STEP_SUMMARY"
