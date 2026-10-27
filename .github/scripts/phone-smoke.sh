@@ -3,11 +3,16 @@ set -euo pipefail
 SDK_BIN="$ANDROID_HOME/cmdline-tools/latest/bin"
 ADB="$ANDROID_HOME/platform-tools/adb"
 IMAGE='system-images;android-36;google_apis;x86_64'
+export ANDROID_USER_HOME="$RUNNER_TEMP/klarlernen-android"
+export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+mkdir -p "$ANDROID_AVD_HOME"
 mkdir -p build/phone-checks
 test -c /dev/kvm
 sudo setfacl -m "u:$(id -un):rw" /dev/kvm
 "$SDK_BIN/sdkmanager" "$IMAGE"
 printf 'no\n' | "$SDK_BIN/avdmanager" create avd --force --name klarlernen-phone --package "$IMAGE" --device pixel_5
+test -f "$ANDROID_AVD_HOME/klarlernen-phone.ini"
 "$ANDROID_HOME/emulator/emulator" -avd klarlernen-phone -no-window -no-audio -no-boot-anim -no-snapshot -gpu software -memory 2048 -cores 2 -camera-back none -camera-front none > build/phone-checks/emulator.log 2>&1 &
 EMULATOR_PID=$!
 cleanup() {
