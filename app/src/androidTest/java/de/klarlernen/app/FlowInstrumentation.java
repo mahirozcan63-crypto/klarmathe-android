@@ -50,13 +50,15 @@ public class FlowInstrumentation extends Instrumentation {
         tap(activity.t("next"));
     }
     void launch(){Intent intent=new Intent(getTargetContext(),MainActivity.class);intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK);activity=(MainActivity)startActivitySync(intent);waitForIdleSync();SystemClock.sleep(300);require(activity.engine!=null,"Startup failed");}
-    AccessibilityNodeInfo dialogButton(AccessibilityNodeInfo node,String title){if(node==null)return null;if(node.isClickable()&&title.contentEquals(node.getText()==null?"":node.getText()))return node;for(int i=0;i<node.getChildCount();i++){AccessibilityNodeInfo found=dialogButton(node.getChild(i),title);if(found!=null)return found;}return null;}
+    AccessibilityNodeInfo dialogButton(AccessibilityNodeInfo node,String title){if(node==null)return null;if(node.isClickable()&&title.equalsIgnoreCase(node.getText()==null?"":node.getText().toString()))return node;for(int i=0;i<node.getChildCount();i++){AccessibilityNodeInfo found=dialogButton(node.getChild(i),title);if(found!=null)return found;}return null;}
     @Override public void onCreate(Bundle arguments){super.onCreate(arguments);start();}
     @Override public void onStart(){Bundle result=new Bundle();try{
         getTargetContext().getSharedPreferences("learning",0).edit().clear().commit();launch();
         ui(()->{for(View v:views(activity.getWindow().getDecorView()))if(v instanceof CheckBox&&v.getTag()!=null)((CheckBox)v).setChecked(v.getTag().equals("math"));});
         tap(activity.t("save"));SystemClock.sleep(500);
-        AccessibilityNodeInfo startCheck=dialogButton(getUiAutomation().getRootInActiveWindow(),activity.t("diagnostic"));
+        require(activity.engine.profile().optBoolean("onboarded"),"Profile save was not activated by touch");
+        AccessibilityNodeInfo startCheck=null;
+        for(int i=0;i<20&&startCheck==null;i++){startCheck=dialogButton(getUiAutomation().getRootInActiveWindow(),activity.t("diagnostic"));if(startCheck==null)SystemClock.sleep(250);}
         require(startCheck!=null&&startCheck.performAction(AccessibilityNodeInfo.ACTION_CLICK),"Startcheck dialog inaccessible");waitForIdleSync();SystemClock.sleep(500);
         require(activity.engine.active().getJSONArray("queue").length()==6,"Initial check must contain six questions");
         answer("999999");tap(activity.t("check"));tap(activity.t("next"));
