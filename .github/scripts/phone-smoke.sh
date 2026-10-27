@@ -10,8 +10,19 @@ sudo setfacl -m "u:$(id -un):rw" /dev/kvm
 printf 'no\n' | "$SDK_BIN/avdmanager" create avd --force --name klarlernen-phone --package "$IMAGE" --device pixel_5
 "$ANDROID_HOME/emulator/emulator" -avd klarlernen-phone -no-window -no-audio -no-boot-anim -no-snapshot -gpu software -memory 2048 -cores 2 -camera-back none -camera-front none > build/phone-checks/emulator.log 2>&1 &
 EMULATOR_PID=$!
-trap '"$ADB" emu kill >/dev/null 2>&1 || kill "$EMULATOR_PID" 2>/dev/null || true' EXIT
-timeout 240 "$ADB" wait-for-device
+cleanup() {
+  STATUS=$?
+  if [ "$STATUS" -ne 0 ]; then
+    tail -100 build/phone-checks/emulator.log
+    cat build/phone-checks/runtime.log 2>/dev/null || true
+  fi
+  "$ADB" emu kill >/dev/null 2>&1 || kill "$EMULATOR_PID" 2>/dev/null || true
+}
+trap cleanup EXIT
+sleep 3
+cat build/phone-checks/emulator.log
+kill -0 "$EMULATOR_PID"
+timeout 180 "$ADB" wait-for-device
 BOOTED=false
 for n in $(seq 1 90); do
   if [ "$("$ADB" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = '1' ]; then
